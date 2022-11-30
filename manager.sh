@@ -24,6 +24,11 @@
 #            - Função Deletar Usuário (correção)            #
 #            - Adicionando menu                             #
 #            - Adicionando flag de versão                   #
+#          29/11/2022, Matheus                              #
+#            - Melhorando função menu                       #
+#            - Função Adicionar Grupo                       #
+#            - Função Listar Grupos                         #
+#            - Função Remover Grupo                         #
 #############################################################
 
 #....................VARIÁVEIS....................#
@@ -34,8 +39,6 @@ VERSION="v1.0"
 #....................TESTES....................#
 [ "$USER" != "root" ] && echo "ERRO. apenas o usuário root pode executar o programa." && exit 1
 [ ! "$(which dialog)" ] && echo "Instalando dependência..." && sudo apt-get install dialog > /dev/null 2>&1
-
-
 #....................FUNÇÕES....................#
 
 ListUsers()
@@ -67,9 +70,11 @@ ValidateUsers()
 
 }
 
-DeleteUser()
+Deleteuser()
 {
   local user=$(dialog --title "Apagar usuário" --stdout --inputbox "Digite o nome" 6 40 )
+
+  user=$(echo "$user" | tr [A-Z] [a-z])
   ValidateUsers "$user"
   if [ $? -eq 0 ]
   then
@@ -80,6 +85,66 @@ DeleteUser()
   fi
   rm -f "$TEMP"
 }
+
+
+ValidateGroups()
+{
+  while read -r line
+  do
+    [ $(echo $line | cut -d $SEP -f 3) -lt 1000 ] && continue
+    [ $(echo $line | cut -d $SEP -f 3) -gt 9999 ] && continue
+    groups="$(echo $line | cut -d $SEP -f 1)"
+    echo "$groups" >> "$TEMP"
+  done < "/etc/group"
+
+  grep -i -q "$1" "$TEMP"
+  return $[ $? ]
+}
+
+ListGroup()
+{
+  while read -r line
+  do
+     [ $(echo $line | cut -d $SEP -f 3 ) -lt 1000 ] && continue
+     [ $(echo $line | cut -d $SEP -f 3 ) -gt 9999 ] && continue
+     group=$(echo "$line" | cut -d $SEP -f 1)
+     echo "$group" >> "$TEMP"
+  done < "/etc/group"
+
+  dialog --title "Grupos do Sistema" --textbox "$TEMP" 6 40
+  rm -f "$TEMP"
+}
+
+CreateGroup()
+{
+  group_name=$(dialog --title "Criar usuário" --stdout --inputbox "Digite o nome do grupo" 6 40)
+  group_name=$(echo "$group_name" | tr [A-Z] [a-z])
+  ValidateGroups "$group_name" || {
+    addgroup "$group_name" > /dev/null 2>&1
+    dialog --title "Sucesso!" --msgbox "Grupo criado com sucesso!" 0 0
+    rm -rf "$TEMP" && return
+  }
+  dialog --title "Erro!" --msgbox "Grupo já existe no sistema!" 0 0
+
+  rm -rf "$TEMP"
+
+}
+
+DeleteGroup()
+{
+  group_name=$(dialog --title "Criar usuário" --stdout --inputbox "Digite o nome do grupo" 6 40)
+  group_name=$(echo "$group_name" | tr [A-Z] [a-z])
+  ValidateGroups "$group_name" && {
+    delgroup "$group_name" > /dev/null 2>&1
+    dialog --title "Sucesso!" --msgbox "Grupo removido com sucesso!" 0 0
+    rm -f "$TEMP" && return
+  }
+  dialog --title "Erro!" --msgbox "Grupo inexistente!" 0 0
+
+  rm -rf "$TEMP"
+
+}
+
 
 #....................EXECUÇÃO....................#
 
@@ -96,17 +161,50 @@ fi
 
 while :
 do
-  action=$(dialog --title "Gerenciamento de Usuários" \
+  option=$(dialog --title "Gerenciamento" \
                   --stdout \
                   --menu "Escolha uma das opções abaixo:" \
                   0 0 0 \
-                  Listar "Lista todos os usuários do sistema" \
-                  Inserir "Adiciona um novo usuário no sistema" \
-                  Remover "Remove um usuário do sistema")
- [ $? -eq 1 ] && exit 0
- case $action in
-   Listar) ListUsers ;;
-   Remover) DeleteUser ;;
-#  Inserir)  ;;
- esac
+                  usuarios "Gerenciamento de Usuários" \
+                  grupos "Gerenciamento de Grupos")
+
+  [ $? -eq 1 ] && exit
+  case $option in
+    usuarios)
+      while :
+      do
+        action=$(dialog --title "Gerenciamento de Usuários" \
+                        --stdout \
+                        --menu "Escolha uma das opções abaixo:" \
+                        0 0 0 \
+                        Listar "Lista todos os usuários do sistema" \
+                        Inserir "Adiciona um novo usuário no sistema" \
+                        Remover "Remove um usuário do sistema")
+       [ $? -ne 0 ] && break;
+       case $action in
+         Listar) ListUsers ;;
+         Remover) Deleteuser ;;
+      #  Inserir)  ;;
+       esac
+      done
+    ;;
+    grupos)
+      while :
+      do
+        action=$(dialog --title "Gerenciamento de Grupos" \
+                        --stdout \
+                        --menu "Escolha uma das opções abaixo:" \
+                        0 0 0 \
+                        Listar "Listar grupos do sistema" \
+                        Inserir "Inserir grupo no sistema" \
+                        Remover "Remover um grupo do sistema")
+        [ $? -ne 0 ] && break
+        case $action in
+          Listar) ListGroup ;;
+          Inserir) CreateGroup ;;
+          Remover) DeleteGroup ;;
+        esac
+      done
+    ;;
+  esac
 done
