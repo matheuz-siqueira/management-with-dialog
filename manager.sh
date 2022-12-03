@@ -29,6 +29,11 @@
 #            - Função Adicionar Grupo                       #
 #            - Função Listar Grupos                         #
 #            - Função Remover Grupo                         #
+#          02/12/2022, Matheus                              #
+#            - Removendo o diretório home                   #
+#            - Adicionar usuário a um grupo                 #
+#          03/12/2022, Matheus                              #
+#            - Remover usuário de um grupo                  # 
 #############################################################
 
 #....................VARIÁVEIS....................#
@@ -47,7 +52,7 @@ ListUsers()
   do
     [ $(echo $line | cut -d $SEP -f 3) -lt 1000 ] && continue
     [ $(echo $line | cut -d $SEP -f 3) -gt 9999 ] && continue
-    nome="$(echo $line | cut -d $SEP -f 1)"
+    local nome="$(echo $line | cut -d $SEP -f 1)"
     echo "$nome" >> "$TEMP"
   done < "/etc/passwd"
 
@@ -61,7 +66,7 @@ ValidateUsers()
   do
     [ $(echo $line | cut -d $SEP -f 3) -lt 1000 ] && continue
     [ $(echo $line | cut -d $SEP -f 3) -gt 9999 ] && continue
-    users="$(echo $line | cut -d $SEP -f 1)"
+    local users="$(echo $line | cut -d $SEP -f 1)"
     echo "$users" >> "$TEMP"
   done < "/etc/passwd"
 
@@ -74,11 +79,14 @@ Deleteuser()
 {
   local user=$(dialog --title "Apagar usuário" --stdout --inputbox "Digite o nome" 6 40 )
 
+  [ -z "$user" ] && return
+
   user=$(echo "$user" | tr [A-Z] [a-z])
   ValidateUsers "$user"
   if [ $? -eq 0 ]
   then
     deluser "$user" > /dev/null 2>&1
+    rm -rf /home/"$user"
     dialog --title "Sucesso!" --msgbox "usuário removido com sucesso!" 6 40
   else
     dialog --title "Erro!" --msgbox "Usuário inexistente!" 6 40
@@ -93,7 +101,7 @@ ValidateGroups()
   do
     [ $(echo $line | cut -d $SEP -f 3) -lt 1000 ] && continue
     [ $(echo $line | cut -d $SEP -f 3) -gt 9999 ] && continue
-    groups="$(echo $line | cut -d $SEP -f 1)"
+    local groups="$(echo $line | cut -d $SEP -f 1)"
     echo "$groups" >> "$TEMP"
   done < "/etc/group"
 
@@ -107,7 +115,7 @@ ListGroup()
   do
      [ $(echo $line | cut -d $SEP -f 3 ) -lt 1000 ] && continue
      [ $(echo $line | cut -d $SEP -f 3 ) -gt 9999 ] && continue
-     group=$(echo "$line" | cut -d $SEP -f 1)
+     local group=$(echo "$line" | cut -d $SEP -f 1)
      echo "$group" >> "$TEMP"
   done < "/etc/group"
 
@@ -117,8 +125,8 @@ ListGroup()
 
 CreateGroup()
 {
-  group_name=$(dialog --title "Criar usuário" --stdout --inputbox "Digite o nome do grupo" 6 40)
-  group_name=$(echo "$group_name" | tr [A-Z] [a-z])
+  local group_name=$(dialog --title "Criar Grupo" --stdout --inputbox "Digite o nome do grupo" 6 40)
+  local group_name=$(echo "$group_name" | tr [A-Z] [a-z])
   ValidateGroups "$group_name" || {
     addgroup "$group_name" > /dev/null 2>&1
     dialog --title "Sucesso!" --msgbox "Grupo criado com sucesso!" 0 0
@@ -132,8 +140,8 @@ CreateGroup()
 
 DeleteGroup()
 {
-  group_name=$(dialog --title "Criar usuário" --stdout --inputbox "Digite o nome do grupo" 6 40)
-  group_name=$(echo "$group_name" | tr [A-Z] [a-z])
+  local group_name=$(dialog --title "Criar usuário" --stdout --inputbox "Digite o nome do grupo" 6 40)
+  local group_name=$(echo "$group_name" | tr [A-Z] [a-z])
   ValidateGroups "$group_name" && {
     delgroup "$group_name" > /dev/null 2>&1
     dialog --title "Sucesso!" --msgbox "Grupo removido com sucesso!" 0 0
@@ -142,9 +150,45 @@ DeleteGroup()
   dialog --title "Erro!" --msgbox "Grupo inexistente!" 0 0
 
   rm -rf "$TEMP"
-
 }
 
+AddUserInGroup()
+{
+  local user=$(dialog --title "Usuário -> Grupo" --stdout --inputbox "Nome do usuário" 6 40 )
+  ValidateUsers "$user" || {
+    dialog --title "Erro" --msgbox "Usuário inexistente!" 0 0
+    rm -rf "$TEMP" && return
+  }
+
+  local group=$(dialog --title "Usuário -> Grupo" --stdout --inputbox "Nome do grupo" 6 40 )
+  ValidateGroups "$group" || {
+    dialog --title "Erro" --msgbox "Grupo inexistente!" 0 0
+    rm -rf "$TEMP" && return
+  }
+
+  gpasswd -a "$user" "$group" > /dev/null 2>&1
+  dialog --title "Sucesso" --msbox "Usuário adicionado ao grupo"
+
+  rm -rf "$TEMP"
+}
+
+RemoveUserFromGroup()
+{
+  local user=$(dialog --title "Usuário -> Grupo" --stdout --inputbox "Nome do usuário" 6 40 )
+  ValidateUsers "$user" || {
+    dialog --title "Erro" --msgbox "Usuário inexistente!" 0 0
+    rm -rf "$TEMP" && return
+  }
+
+  local group=$(dialog --title "Usuário -> Grupo" --stdout --inputbox "Nome do grupo" 6 40 )
+  ValidateGroups "$group" || {
+    dialog --title "Erro" --msgbox "Grupo inexistente!" 0 0
+    rm -rf "$TEMP" && return
+  }
+
+  gpasswd -d "$user" "$group" > /dev/null 2>&1
+  rm -rf "$TEMP"
+}
 
 #....................EXECUÇÃO....................#
 
@@ -161,7 +205,7 @@ fi
 
 while :
 do
-  option=$(dialog --title "Gerenciamento" \
+  option=$(dialog --title "Gerenciamento 2.0" \
                   --stdout \
                   --menu "Escolha uma das opções abaixo:" \
                   0 0 0 \
@@ -179,11 +223,15 @@ do
                         0 0 0 \
                         Listar "Lista todos os usuários do sistema" \
                         Inserir "Adiciona um novo usuário no sistema" \
-                        Remover "Remove um usuário do sistema")
+                        Remover "Remove um usuário do sistema" \
+                        AddGrupo "Adicionar usuário a um grupo" \
+                        DelGroup "Remover usuário de um grupo")
        [ $? -ne 0 ] && break;
        case $action in
-         Listar) ListUsers ;;
-         Remover) Deleteuser ;;
+         Listar) ListUsers             ;;
+         Remover) Deleteuser           ;;
+         AddGrupo) AddUserInGroup      ;;
+         DelGroup) RemoveUserFromGroup ;;
       #  Inserir)  ;;
        esac
       done
@@ -200,7 +248,7 @@ do
                         Remover "Remover um grupo do sistema")
         [ $? -ne 0 ] && break
         case $action in
-          Listar) ListGroup ;;
+          Listar) ListGroup    ;;
           Inserir) CreateGroup ;;
           Remover) DeleteGroup ;;
         esac
